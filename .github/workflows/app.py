@@ -1,21 +1,16 @@
 # --- IMPORTS ET PRÉPARATION ---
 import streamlit as st
-import io
-import json
-import re
+import io # Gardé au cas où l'utilisateur voudrait uploader plus tard
+import re # Gardé par défaut, mais non utilisé dans cette version
 from datetime import datetime
-import os
-
 # Importation spécifique pour Google Drive
 try:
     # Nécessaire pour pydrive2
     from pydrive2.auth import GoogleAuth
     from pydrive2.drive import GoogleDrive
-    from google.oauth2 import service_account # Import utilisé dans l'initialisation
-    from google.auth.transport.requests import AuthorizedSession # <--- Import de l'objet non compatible
+    # Les imports de google.oauth2 et AuthorizedSession sont retirés car non compatibles avec pydrive2
     GOOGLE_DRIVE_AVAILABLE = True
 except ImportError:
-    # Ce message d'erreur s'affiche si les dépendances ne sont pas installées.
     st.error("🚨 Erreur: Le module 'pydrive2' ou ses dépendances sont manquants. Exécutez 'pip install pydrive2 google-api-python-client'.")
     GOOGLE_DRIVE_AVAILABLE = False
     
@@ -31,6 +26,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+# La fonction clean_json_string est retirée car non nécessaire avec l'authentification corrigée.
 # --- FONCTION DE NETTOYAGE AMÉLIORÉE POUR LA ROBUSTESSE ---
 def clean_json_string(json_string):
     """
@@ -43,41 +39,44 @@ def clean_json_string(json_string):
     # ou un caractère de contrôle "sûr" (\t, \n, \r) par une chaîne vide.
     cleaned_string = re.sub(r'[^\x20-\x7E\t\n\r]', '', json_string)
     return cleaned_string
-
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (INITIALE - CAUSE DU BUG) ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE (CORRIGÉE) ---
 
 @st.cache_resource(show_spinner="Initialisation de Google Drive...")
 def init_google_drive():
+    """Initialise l'objet GoogleDrive en utilisant l'authentification par compte de service pydrive2."""
+    if not GOOGLE_DRIVE_AVAILABLE:
+        return None, None
+        
     try:
-        # Reconstruire l'objet JSON du compte de service à partir des secrets individuels
-        json_key_info = {
-            "type": st.secrets["google_drive"]["type"],
-            "project_id": st.secrets["google_drive"]["project_id"],
-            "private_key_id": st.secrets["google_drive"]["private_key_id"],
-            "private_key": st.secrets["google_drive"]["private_key"], # Utilise la clé échappée
-            "client_email": st.secrets["google_drive"]["client_email"],
-            "client_id": st.secrets["google_drive"]["client_id"],
-            "auth_uri": st.secrets["google_drive"]["auth_uri"],
-            "token_uri": st.secrets["google_drive"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["google_drive"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["google_drive"]["client_x509_cert_url"],
-            "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
-        }
+        # 1. Initialisation de GoogleAuth
+        gauth = GoogleAuth()
 
-        # 1. Création des identifiants (Utilisation de google.oauth2.service_account)
-        creds = service_account.Credentials.from_service_account_info(
-            json_key_info,
-            scopes=['https://www.googleapis.com/auth/drive']
-        )
+        # 2. Récupérer les identifiants du compte de service depuis Streamlit Secrets
+        client_email = st.secrets["google_drive"]["client_email"]
+        private_key = st.secrets["google_drive"]["private_key"]
         
-        # 2. Création de la session (Utilisation de AuthorizedSession non compatible avec pydrive2)
-        http_auth = AuthorizedSession(creds)
-        drive = GoogleDrive(http_auth) # <--- C'est ici que l'erreur se produit
+        # 3. Définir les paramètres d'authentification pour utiliser le compte de service
+        gauth.settings['service_account'] = True
+        # Utiliser le scope Drive complet pour la lecture (drive.readonly suffirait)
+        gauth.settings['oauth_scope'] = ['https://www.googleapis.com/auth/drive'] 
         
-        # 3. Récupération de l'ID du dossier cible
-        folder_id = st.secrets["google_drive"]["target_folder_id"] # Clé requise
+        # 🚨 FIX du bug 'Missing required setting service_config' 
+        # Configure manuellement les secrets pour pydrive2
+        gauth.settings['client_config'] = {
+            'client_email': client_email,
+            'private_key': private_key
+        }
         
-        st.success("✅ Google Drive initialisé avec succès. Prêt à uploader.")
+        # 4. Charger les identifiants
+        gauth.LoadServiceAccountCredentials(client_email, private_key)
+        
+        # 5. Créer l'objet GoogleDrive avec l'objet d'authentification configuré
+        drive = GoogleDrive(gauth)
+        
+        # 6. Récupération de l'ID du dossier cible
+        folder_id = st.secrets["google_drive"]["target_folder_id"] 
+        
+        st.success("✅ Google Drive initialisé avec succès. Prêt à lister les fichiers.")
         return drive, folder_id
 
     except Exception as e:
@@ -85,44 +84,66 @@ def init_google_drive():
         st.caption("Veuillez vérifier les valeurs individuelles de votre compte de service dans `secrets.toml`.")
         return None, None
 
-# --- FONCTION DE SAUVEGARDE DE FICHIER UNIQUE ---
+# --- NOUVELLE FONCTION DE LISTE DE FICHIERS ---
 
-def upload_file_to_drive(drive, folder_id, uploaded_file):
-    """Sauvegarde un unique objet UploadedFile dans Google Drive."""
+def list_files_in_drive_folder(drive, folder_id):
+    """Liste les fichiers présents dans le dossier cible et les affiche dans Streamlit."""
     
     if not drive or not folder_id:
-        st.error("Google Drive non initialisé. Upload impossible.")
-        return False
+        st.error("Google Drive non initialisé. Liste impossible.")
+        return
 
-    file_name = f"TEST_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_file.name}"
+    st.markdown("<div class='phase-block'>", unsafe_allow_html=True)
+    st.markdown(f"<h2>Contenu du dossier Drive</h2>", unsafe_allow_html=True)
+    st.info(f"Dossier cible (ID) : `{folder_id}`")
+    
+    # Requête de recherche pydrive2 pour lister uniquement les fichiers (non-dossiers) dans le dossier cible
+    # 'trashed = false' exclut les fichiers dans la corbeille.
+    # 'mimeType != "application/vnd.google-apps.folder"' exclut les sous-dossiers.
+    query = f"'{folder_id}' in parents and trashed = false and mimeType != 'application/vnd.google-apps.folder'"
     
     try:
-        with st.spinner(f"Upload en cours de {file_name}..."):
-            # Créer le fichier sur Drive
-            file_drive = drive.CreateFile({
-                'title': file_name, 
-                'parents': [{'id': folder_id}], 
-                'mimeType': uploaded_file.type
+        with st.spinner("Récupération de la liste des fichiers..."):
+            # Obtient la liste des fichiers correspondant à la requête
+            file_list = drive.ListFile({'q': query}).GetList()
+            
+        if not file_list:
+            st.warning("Le dossier ne contient aucun fichier (ou aucun fichier non-dossier).")
+            st.markdown("</div>", unsafe_allow_html=True)
+            return
+
+        st.success(f"🎉 **{len(file_list)}** fichiers trouvés dans le dossier.")
+        
+        # Préparer les données pour l'affichage
+        data = []
+        for file in file_list:
+            # Conversion de la taille en Mo pour une meilleure lisibilité
+            size_mb = f"{int(file.get('fileSize', 0)) / (1024*1024):.2f} Mo" if file.get('fileSize') else 'N/A'
+            
+            # Formater la date de modification
+            modified_date = datetime.strptime(file['modifiedDate'], '%Y-%m-%dT%H:%M:%S.%fZ').strftime('%Y-%m-%d %H:%M:%S')
+
+            data.append({
+                "Nom du Fichier": file['title'],
+                "Taille": size_mb,
+                "Type MIME": file['mimeType'],
+                "ID du Fichier": file['id'],
+                "Modifié le": modified_date
             })
-            
-            # Lire les octets du fichier uploadé et les attribuer au contenu du fichier Drive
-            file_drive.content = io.BytesIO(uploaded_file.getvalue())
-            
-            # Uploader
-            file_drive.Upload()
-            
-        st.success(f"🎉 Fichier uploadé avec succès sur Drive : **{file_name}**")
-        st.info(f"Vérifiez le dossier Google Drive ID : `{folder_id}`")
-        return True
+
+        # Afficher la liste des fichiers dans un tableau Streamlit
+        st.dataframe(data, use_container_width=True)
+        
     except Exception as e:
-        st.error(f"❌ Échec de l'upload du fichier : {e}")
-        st.warning("Vérifiez les permissions de votre clé de service (rôle ÉDITEUR) pour l'écriture dans le dossier cible.")
-        return False
+        st.error(f"❌ Échec de la récupération de la liste des fichiers : {e}")
+        st.warning("Vérifiez que le compte de service a les permissions de LECTURE sur le dossier cible.")
+        
+    st.markdown("</div>", unsafe_allow_html=True)
 
 # --- BOUCLE PRINCIPALE DE TEST ---
 
 def main():
-    st.markdown("<div class='main-header'><h1>Test de Connexion Google Drive</h1></div>", unsafe_allow_html=True)
+    st.markdown("<div class='main-header'><h1>Test de Connexion Google Drive et Liste des Fichiers</h1></div>", unsafe_allow_html=True)
     
     # Si les dépendances sont manquantes, on arrête l'exécution de la logique principale
     if not GOOGLE_DRIVE_AVAILABLE:
@@ -140,26 +161,15 @@ def main():
 
     st.markdown("---")
     
-    # 2. Formulaire d'Upload
-    with st.form(key='drive_upload_form', clear_on_submit=True):
-        st.markdown("<div class='phase-block'>", unsafe_allow_html=True)
-        st.markdown("<h2>Upload de Fichier Test</h2>", unsafe_allow_html=True)
+    # 2. Bouton pour déclencher la liste
+    # La liste est affichée uniquement après que l'utilisateur clique sur le bouton
+    st.markdown("<div class='phase-block'>", unsafe_allow_html=True)
+    st.markdown("<h2>Action</h2>", unsafe_allow_html=True)
+    
+    if st.button("🔄 Actualiser et Afficher la Liste des Fichiers dans Drive", type="primary"):
+        list_files_in_drive_folder(drive, folder_id)
         
-        uploaded_file = st.file_uploader(
-            "Sélectionnez un fichier (Image, PDF, etc.) à uploader sur Drive", 
-            key="test_file_uploader", 
-            type=["png", "jpg", "jpeg", "pdf", "txt", "csv"]
-        )
-        
-        submitted = st.form_submit_button("📤 Uploader sur Google Drive")
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    # 3. Traitement de la Soumission
-    if submitted and uploaded_file is not None:
-        st.info(f"Tentative d'upload du fichier : {uploaded_file.name}")
-        upload_file_to_drive(drive, folder_id, uploaded_file)
-    elif submitted and uploaded_file is None:
-        st.warning("Veuillez sélectionner un fichier avant d'uploader.")
+    st.markdown("</div>", unsafe_allow_html=True)
 
 if __name__ == '__main__':
     main()
