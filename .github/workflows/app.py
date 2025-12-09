@@ -50,37 +50,41 @@ def clean_json_string(json_string):
     
     return cleaned_string
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (MODIFIÉE) ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE ---
 
+# Utilisation de st.cache_resource pour ne pas réinitialiser la connexion à chaque ré-exécution
 @st.cache_resource(show_spinner="Initialisation de Google Drive...")
 def init_google_drive():
-    """Initialise l'objet Google Drive à partir des secrets Streamlit (méthode divisée)."""
+    """Initialise l'objet Google Drive à partir des secrets Streamlit."""
     
-    # ... (Vérifications d'importation et de secrets) ...
+    if not GOOGLE_DRIVE_AVAILABLE:
+        # Si l'importation a échoué (dépendances manquantes), on s'arrête ici.
+        return None, None
+        
+    if "google_drive" not in st.secrets:
+        st.error("⚠️ Secret 'google_drive' non trouvé dans secrets.toml. Veuillez configurer la clé de service et l'ID du dossier cible.")
+        return None, None
 
     try:
-        # Reconstruire l'objet JSON du compte de service à partir des secrets individuels
-        # Les valeurs simples récupérées des secrets sont déjà des chaînes Python valides.
-        json_key_info = {
-            "type": st.secrets["google_drive"].get("type"),
-            "project_id": st.secrets["google_drive"].get("project_id"), # Assurez-vous d'avoir ceci dans secrets.toml
-            "private_key_id": st.secrets["google_drive"].get("private_key_id"), # Assurez-vous d'avoir ceci
-            "private_key": st.secrets["google_drive"]["private_key_value"], # Clé échappée
-            "client_email": st.secrets["google_drive"]["client_email"],
-            "client_id": st.secrets["google_drive"].get("client_id"), # Assurez-vous d'avoir ceci
-            "token_uri": st.secrets["google_drive"].get("token_uri"),
-            # Ajoutez toutes les autres clés manquantes que Google demande
-        }
-
-        # NOTE : Plus besoin de json.loads() ni de clean_json_string() !
-
-        # 1. Création des identifiants (Utilise l'objet Python reconstruit)
+        json_key_info_str = st.secrets["google_drive"]["service_account_json"]
+        
+        # 1. Nettoyage de la chaîne JSON pour éliminer les caractères de contrôle problématiques
+        # sans toucher aux sauts de ligne essentiels de la clé privée.
+        cleaned_json_key_info_str = clean_json_string(json_key_info_str)
+        
+        # 2. Chargement du JSON nettoyé
+        json_key_info = json.loads(cleaned_json_key_info_str) 
+        
+        # Vérification optionnelle de la clé
+        if len(json_key_info.get("private_key", "")) < 500: 
+            st.warning("⚠️ La clé privée semble courte. Cela peut indiquer un problème de secret non formaté correctement.")
+            
+        # 3. Création des identifiants (Là où l'erreur de désérialisation se produisait)
         creds = service_account.Credentials.from_service_account_info(
             json_key_info,
             scopes=['https://www.googleapis.com/auth/drive']
         )
         
-        # ... (Reste du code identique) ...
         http_auth = AuthorizedSession(creds)
         drive = GoogleDrive(http_auth)
         
@@ -95,7 +99,7 @@ def init_google_drive():
 
     except Exception as e:
         st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
-        st.caption("Veuillez vérifier les valeurs individuelles de votre compte de service dans `secrets.toml`.")
+        st.caption("Veuillez vérifier le formatage de votre clé de service JSON dans `secrets.toml` (utilisation de triples guillemets `\"\"\"` recommandée).")
         return None, None
 
 # --- FONCTION DE SAUVEGARDE DE FICHIER UNIQUE ---
