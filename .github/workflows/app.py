@@ -8,10 +8,11 @@ import os
 
 # Importation spécifique pour Google Drive
 try:
+    # GoogleAuth et GoogleDrive sont les classes nécessaires de pydrive2
     from pydrive2.auth import GoogleAuth
     from pydrive2.drive import GoogleDrive
-    from google.oauth2 import service_account
-    # from google.auth.transport.requests import AuthorizedSession # N'est plus utilisé directement
+    # Les modules google.oauth2 ne sont plus utilisés pour l'initialisation, 
+    # car nous laissons pydrive2 gérer la création des credentials.
     GOOGLE_DRIVE_AVAILABLE = True
 except ImportError:
     st.error("🚨 Erreur: Le module 'pydrive2' ou ses dépendances sont manquants. Exécutez 'pip install pydrive2 google-api-python-client'.")
@@ -29,11 +30,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (CORRIGÉE et ROBUSTE) ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL) ---
 
 @st.cache_resource(show_spinner="Initialisation de Google Drive...")
 def init_google_drive():
-    """Initialise l'objet Google Drive et le stocke dans st.session_state."""
+    """Initialise l'objet Google Drive via GoogleAuth et le stocke dans st.session_state."""
     
     if not GOOGLE_DRIVE_AVAILABLE:
         st.session_state.drive_initialized = False
@@ -45,13 +46,13 @@ def init_google_drive():
         return False
 
     try:
-        # Reconstruire l'objet JSON du compte de service à partir des secrets individuels
-        # (Cette méthode évite les erreurs de caractère de contrôle JSON)
+        # 1. Reconstruire l'objet JSON du compte de service à partir des secrets individuels
+        #    Cette structure a résolu les problèmes de formatage
         json_key_info = {
             "type": st.secrets["google_drive"]["type"],
             "project_id": st.secrets["google_drive"]["project_id"],
             "private_key_id": st.secrets["google_drive"]["private_key_id"],
-            "private_key": st.secrets["google_drive"]["private_key"], # Clé échappée
+            "private_key": st.secrets["google_drive"]["private_key"], 
             "client_email": st.secrets["google_drive"]["client_email"],
             "client_id": st.secrets["google_drive"]["client_id"],
             "auth_uri": st.secrets["google_drive"]["auth_uri"],
@@ -61,22 +62,26 @@ def init_google_drive():
             "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
         }
         
-        # 1. Création des identifiants Google OAuth
-        creds = service_account.Credentials.from_service_account_info(
-            json_key_info,
-            scopes=['https://www.googleapis.com/auth/drive']
-        )
-        
-        # 2. Utilisation de GoogleAuth pour la compatibilité avec pydrive2
-        #    Ceci corrige l'erreur 'access_token_expired'
+        # 2. Configurer GoogleAuth pour utiliser le Compte de Service
         gauth = GoogleAuth()
-        gauth.credentials = creds 
+        # Définir le backend de configuration sur 'service' pour indiquer un Service Account
+        gauth.settings['client_config_backend'] = 'service'
+        # Injecter les informations de la clé de service
+        gauth.settings['client_config'] = json_key_info
+        # Définir les scopes requis
+        gauth.settings['oauth_scope'] = ['https://www.googleapis.com/auth/drive']
+        
+        # 3. Exécuter l'authentification du Compte de Service via pydrive2
+        #    Ceci crée un objet compatible avec les méthodes access_token_expired
+        gauth.ServiceAuth()
+        
+        # 4. Créer l'objet GoogleDrive
         drive = GoogleDrive(gauth)
         
-        # 3. Récupération de l'ID du dossier cible
+        # 5. Récupération de l'ID du dossier cible
         folder_id = st.secrets["google_drive"]["target_folder_id"] 
         
-        # 4. Stockage des objets dans l'état de session
+        # 6. Stockage des objets dans l'état de session
         st.session_state.drive_obj = drive
         st.session_state.folder_id = folder_id
         st.session_state.drive_initialized = True
@@ -86,7 +91,7 @@ def init_google_drive():
 
     except Exception as e:
         st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
-        st.caption("Veuillez vérifier les valeurs individuelles de votre compte de service dans `secrets.toml`.")
+        st.caption("Veuillez vérifier les valeurs individuelles de votre compte de service dans `secrets.toml` et les permissions du compte.")
         st.session_state.drive_initialized = False
         return False
 
@@ -128,7 +133,7 @@ def upload_file_to_drive(drive, folder_id, uploaded_file):
 def main():
     st.markdown("<div class='main-header'><h1>Test de Connexion Google Drive</h1></div>", unsafe_allow_html=True)
     
-    # 1. Tenter l'initialisation de Drive (Le résultat est stocké dans st.session_state)
+    # 1. Tenter l'initialisation de Drive
     init_success = init_google_drive()
     
     if not init_success:
@@ -156,7 +161,7 @@ def main():
     if submitted and uploaded_file is not None:
         if st.session_state.drive_initialized:
             st.info(f"Tentative d'upload du fichier : {uploaded_file.name}")
-            # Les objets sont récupérés de st.session_state, ce qui élimine la NameError
+            # Les objets sont récupérés de st.session_state
             upload_file_to_drive(st.session_state.drive_obj, st.session_state.folder_id, uploaded_file) 
         else:
             st.error("L'objet Drive n'est pas initialisé. Veuillez rafraîchir ou vérifier la configuration.")
