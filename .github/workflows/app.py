@@ -8,9 +8,11 @@ import os
 
 # Importation spécifique pour Google Drive
 try:
-    # GoogleAuth et GoogleDrive sont les classes nécessaires de pydrive2
+    # Réintégrer les imports nécessaires pour cette méthode
     from pydrive2.auth import GoogleAuth
     from pydrive2.drive import GoogleDrive
+    from google.oauth2 import service_account
+    from google.auth.transport.requests import AuthorizedSession
     GOOGLE_DRIVE_AVAILABLE = True
 except ImportError:
     st.error("🚨 Erreur: Le module 'pydrive2' ou ses dépendances sont manquants. Exécutez 'pip install pydrive2 google-api-python-client'.")
@@ -28,14 +30,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL ET ROBUSTE) ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE (VERSION STABILITÉ) ---
 
 @st.cache_resource(show_spinner="Initialisation de Google Drive...")
 def init_google_drive():
-    """
-    Initialise l'objet Google Drive via GoogleAuth et le stocke dans st.session_state.
-    Utilise la méthode de configuration ServiceAuth de pydrive2 pour la robustesse.
-    """
+    """Initialise l'objet Google Drive en combinant google-auth et pydrive2."""
     
     if not GOOGLE_DRIVE_AVAILABLE:
         st.session_state.drive_initialized = False
@@ -47,8 +46,7 @@ def init_google_drive():
         return False
 
     try:
-        # 1. Reconstruire l'objet JSON du compte de service à partir des secrets individuels
-        #    Cette structure a été confirmée comme résolvant les problèmes de formatage.
+        # 1. Reconstruire l'objet JSON du compte de service (Méthode de la clé divisée)
         json_key_info = {
             "type": st.secrets["google_drive"]["type"],
             "project_id": st.secrets["google_drive"]["project_id"],
@@ -63,18 +61,16 @@ def init_google_drive():
             "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
         }
         
-        # 2. Configurer GoogleAuth
+        # 2. Création des identifiants (creds)
+        creds = service_account.Credentials.from_service_account_info(
+            json_key_info,
+            scopes=['https://www.googleapis.com/auth/drive']
+        )
+        
+        # 3. Utilisation de GoogleAuth pour encapsuler les identifiants pour pydrive2
+        # Ceci résout le problème de compatibilité des tokens lors de l'upload.
         gauth = GoogleAuth()
-        
-        # **CORRECTION CRUCIALE :** Passage de la configuration du compte de service via 'service_config'
-        gauth.settings['service_config'] = json_key_info 
-        
-        # Définir les scopes (permissions)
-        gauth.settings['oauth_scope'] = ['https://www.googleapis.com/auth/drive']
-        
-        # 3. Exécuter l'authentification du Compte de Service
-        #    Ceci utilise la configuration en mémoire (service_config)
-        gauth.ServiceAuth()
+        gauth.credentials = creds 
         
         # 4. Créer l'objet GoogleDrive
         drive = GoogleDrive(gauth)
@@ -82,17 +78,17 @@ def init_google_drive():
         # 5. Récupération de l'ID du dossier cible
         folder_id = st.secrets["google_drive"]["target_folder_id"] 
         
-        # 6. Stockage des objets dans l'état de session pour la persistance
+        # 6. Stockage des objets dans l'état de session
         st.session_state.drive_obj = drive
         st.session_state.folder_id = folder_id
         st.session_state.drive_initialized = True
-        
+            
         st.success("✅ Google Drive initialisé avec succès. Prêt à uploader.")
         return True
 
     except Exception as e:
         st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
-        st.caption("Veuillez vérifier les valeurs de votre compte de service dans `secrets.toml` et les permissions du compte.")
+        st.caption("Veuillez vérifier les valeurs de votre compte de service dans `secrets.toml`.")
         st.session_state.drive_initialized = False
         return False
 
@@ -162,7 +158,6 @@ def main():
     if submitted and uploaded_file is not None:
         if st.session_state.drive_initialized:
             st.info(f"Tentative d'upload du fichier : {uploaded_file.name}")
-            # Les objets sont récupérés de st.session_state
             upload_file_to_drive(st.session_state.drive_obj, st.session_state.folder_id, uploaded_file) 
         else:
             st.error("L'objet Drive n'est pas initialisé. Veuillez rafraîchir ou vérifier la configuration.")
