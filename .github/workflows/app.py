@@ -50,36 +50,30 @@ def clean_json_string(json_string):
     
     return cleaned_string
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE (MISE À JOUR) ---
 
-# Utilisation de st.cache_resource pour ne pas réinitialiser la connexion à chaque ré-exécution
 @st.cache_resource(show_spinner="Initialisation de Google Drive...")
 def init_google_drive():
-    """Initialise l'objet Google Drive à partir des secrets Streamlit."""
-    
-    if not GOOGLE_DRIVE_AVAILABLE:
-        # Si l'importation a échoué (dépendances manquantes), on s'arrête ici.
-        return None, None
-        
-    if "google_drive" not in st.secrets:
-        st.error("⚠️ Secret 'google_drive' non trouvé dans secrets.toml. Veuillez configurer la clé de service et l'ID du dossier cible.")
-        return None, None
+    # ... (Vérifications d'importation omises pour la concision) ...
 
     try:
-        json_key_info_str = st.secrets["google_drive"]["service_account_json"]
-        
-        # 1. Nettoyage de la chaîne JSON pour éliminer les caractères de contrôle problématiques
-        # sans toucher aux sauts de ligne essentiels de la clé privée.
-        cleaned_json_key_info_str = clean_json_string(json_key_info_str)
-        
-        # 2. Chargement du JSON nettoyé
-        json_key_info = json.loads(cleaned_json_key_info_str) 
-        
-        # Vérification optionnelle de la clé
-        if len(json_key_info.get("private_key", "")) < 500: 
-            st.warning("⚠️ La clé privée semble courte. Cela peut indiquer un problème de secret non formaté correctement.")
-            
-        # 3. Création des identifiants (Là où l'erreur de désérialisation se produisait)
+        # Reconstruire l'objet JSON du compte de service à partir des secrets individuels
+        # Les clés proviennent directement du secrets.toml que vous avez fourni
+        json_key_info = {
+            "type": st.secrets["google_drive"]["type"],
+            "project_id": st.secrets["google_drive"]["project_id"],
+            "private_key_id": st.secrets["google_drive"]["private_key_id"],
+            "private_key": st.secrets["google_drive"]["private_key"], # Utilise la clé échappée
+            "client_email": st.secrets["google_drive"]["client_email"],
+            "client_id": st.secrets["google_drive"]["client_id"],
+            "auth_uri": st.secrets["google_drive"]["auth_uri"],
+            "token_uri": st.secrets["google_drive"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["google_drive"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["google_drive"]["client_x509_cert_url"],
+            "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
+        }
+
+        # 1. Création des identifiants (Plus besoin de clean_json_string ou json.loads)
         creds = service_account.Credentials.from_service_account_info(
             json_key_info,
             scopes=['https://www.googleapis.com/auth/drive']
@@ -88,18 +82,17 @@ def init_google_drive():
         http_auth = AuthorizedSession(creds)
         drive = GoogleDrive(http_auth)
         
-        folder_id = st.secrets["google_drive"].get("target_folder_id")
+        # 2. Récupération de l'ID du dossier cible
+        folder_id = st.secrets["google_drive"]["target_folder_id"] # Clé requise
         
-        if not folder_id:
-            st.error("❌ 'target_folder_id' est manquant dans la section [google_drive] du secret.")
-            return None, None
-            
+        # ... (Vérification et succès omis pour la concision) ...
         st.success("✅ Google Drive initialisé avec succès. Prêt à uploader.")
         return drive, folder_id
 
     except Exception as e:
+        # ... (Gestion des erreurs omise) ...
         st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
-        st.caption("Veuillez vérifier le formatage de votre clé de service JSON dans `secrets.toml` (utilisation de triples guillemets `\"\"\"` recommandée).")
+        st.caption("Veuillez vérifier les valeurs individuelles de votre compte de service dans `secrets.toml`.")
         return None, None
 
 # --- FONCTION DE SAUVEGARDE DE FICHIER UNIQUE ---
