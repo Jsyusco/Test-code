@@ -32,69 +32,8 @@ st.markdown("""
 
 # --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL) ---
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL CORRIGÉ) ---
-
-@st.cache_resource(show_spinner="Initialisation de Google Drive...")
-def init_google_drive():
-    """Initialise l'objet Google Drive via GoogleAuth et le stocke dans st.session_state."""
-    
-    if not GOOGLE_DRIVE_AVAILABLE:
-        st.session_state.drive_initialized = False
-        return False
-        
-    if "google_drive" not in st.secrets:
-        st.error("⚠️ Secret 'google_drive' non trouvé. Vérifiez `secrets.toml`.")
-        st.session_state.drive_initialized = False
-        return False
-
-    try:
-        # 1. Reconstruire l'objet JSON du compte de service à partir des secrets individuels
-        json_key_info = {
-            "type": st.secrets["google_drive"]["type"],
-            "project_id": st.secrets["google_drive"]["project_id"],
-            "private_key_id": st.secrets["google_drive"]["private_key_id"],
-            "private_key": st.secrets["google_drive"]["private_key"], 
-            "client_email": st.secrets["google_drive"]["client_email"],
-            "client_id": st.secrets["google_drive"]["client_id"],
-            "auth_uri": st.secrets["google_drive"]["auth_uri"],
-            "token_uri": st.secrets["google_drive"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["google_drive"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["google_drive"]["client_x509_cert_url"],
-            "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
-        }
-        
-        # 2. Configurer GoogleAuth pour utiliser le Compte de Service
-        gauth = GoogleAuth()
-        
-        # **CORRECTION CRUCIALE :** Utiliser 'service_config' au lieu de 'client_config' 
-        # pour l'authentification Service Account.
-        gauth.settings['service_config'] = json_key_info 
-        
-        gauth.settings['client_config_backend'] = 'service'
-        gauth.settings['oauth_scope'] = ['https://www.googleapis.com/auth/drive']
-        
-        # 3. Exécuter l'authentification du Compte de Service via pydrive2
-        gauth.ServiceAuth()
-        
-        # 4. Créer l'objet GoogleDrive
-        drive = GoogleDrive(gauth)
-        
-        # 5. Récupération de l'ID du dossier cible
-        folder_id = st.secrets["google_drive"]["target_folder_id"] 
-        
-        # 6. Stockage des objets dans l'état de session
-        st.session_state.drive_obj = drive
-        st.session_state.folder_id = folder_id
-        st.session_state.drive_initialized = True
-        
-        st.success("✅ Google Drive initialisé avec succès. Prêt à uploader.")
-        return True
-
-    except Exception as e:
-        st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
-        st.caption("Veuillez vérifier les valeurs de votre compte de service et les permissions du compte.")
-        st.session_state.drive_initialized = False
-        return False
+# Ligne à supprimer :
+# gauth.settings['client_config_backend'] = 'service'
 
 # --- FONCTION DE SAUVEGARDE DE FICHIER UNIQUE ---
 
