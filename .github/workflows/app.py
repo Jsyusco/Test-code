@@ -11,8 +11,6 @@ try:
     # GoogleAuth et GoogleDrive sont les classes nécessaires de pydrive2
     from pydrive2.auth import GoogleAuth
     from pydrive2.drive import GoogleDrive
-    # Les modules google.oauth2 ne sont plus utilisés pour l'initialisation, 
-    # car nous laissons pydrive2 gérer la création des credentials.
     GOOGLE_DRIVE_AVAILABLE = True
 except ImportError:
     st.error("🚨 Erreur: Le module 'pydrive2' ou ses dépendances sont manquants. Exécutez 'pip install pydrive2 google-api-python-client'.")
@@ -30,10 +28,73 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL) ---
+# --- FONCTION D'INITIALISATION GOOGLE DRIVE (FINAL ET ROBUSTE) ---
 
-# Ligne à supprimer :
-# gauth.settings['client_config_backend'] = 'service'
+@st.cache_resource(show_spinner="Initialisation de Google Drive...")
+def init_google_drive():
+    """
+    Initialise l'objet Google Drive via GoogleAuth et le stocke dans st.session_state.
+    Utilise la méthode de configuration ServiceAuth de pydrive2 pour la robustesse.
+    """
+    
+    if not GOOGLE_DRIVE_AVAILABLE:
+        st.session_state.drive_initialized = False
+        return False
+        
+    if "google_drive" not in st.secrets:
+        st.error("⚠️ Secret 'google_drive' non trouvé. Vérifiez `secrets.toml`.")
+        st.session_state.drive_initialized = False
+        return False
+
+    try:
+        # 1. Reconstruire l'objet JSON du compte de service à partir des secrets individuels
+        #    Cette structure a été confirmée comme résolvant les problèmes de formatage.
+        json_key_info = {
+            "type": st.secrets["google_drive"]["type"],
+            "project_id": st.secrets["google_drive"]["project_id"],
+            "private_key_id": st.secrets["google_drive"]["private_key_id"],
+            "private_key": st.secrets["google_drive"]["private_key"], 
+            "client_email": st.secrets["google_drive"]["client_email"],
+            "client_id": st.secrets["google_drive"]["client_id"],
+            "auth_uri": st.secrets["google_drive"]["auth_uri"],
+            "token_uri": st.secrets["google_drive"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["google_drive"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["google_drive"]["client_x509_cert_url"],
+            "universe_domain": st.secrets["google_drive"].get("universe_domain", "googleapis.com")
+        }
+        
+        # 2. Configurer GoogleAuth
+        gauth = GoogleAuth()
+        
+        # **CORRECTION CRUCIALE :** Passage de la configuration du compte de service via 'service_config'
+        gauth.settings['service_config'] = json_key_info 
+        
+        # Définir les scopes (permissions)
+        gauth.settings['oauth_scope'] = ['https://www.googleapis.com/auth/drive']
+        
+        # 3. Exécuter l'authentification du Compte de Service
+        #    Ceci utilise la configuration en mémoire (service_config)
+        gauth.ServiceAuth()
+        
+        # 4. Créer l'objet GoogleDrive
+        drive = GoogleDrive(gauth)
+        
+        # 5. Récupération de l'ID du dossier cible
+        folder_id = st.secrets["google_drive"]["target_folder_id"] 
+        
+        # 6. Stockage des objets dans l'état de session pour la persistance
+        st.session_state.drive_obj = drive
+        st.session_state.folder_id = folder_id
+        st.session_state.drive_initialized = True
+        
+        st.success("✅ Google Drive initialisé avec succès. Prêt à uploader.")
+        return True
+
+    except Exception as e:
+        st.error(f"❌ ÉCHEC de l'initialisation de Google Drive : {e}")
+        st.caption("Veuillez vérifier les valeurs de votre compte de service dans `secrets.toml` et les permissions du compte.")
+        st.session_state.drive_initialized = False
+        return False
 
 # --- FONCTION DE SAUVEGARDE DE FICHIER UNIQUE ---
 
@@ -109,7 +170,7 @@ def main():
         st.warning("Veuillez sélectionner un fichier avant d'uploader.")
 
 if __name__ == '__main__':
-    # Initialisation des clés de session avant tout appel à main()
+    # Initialisation des clés de session au démarrage
     if 'drive_initialized' not in st.session_state:
         st.session_state.drive_initialized = False
     if 'drive_obj' not in st.session_state:
