@@ -5,15 +5,18 @@ import urllib.parse
 from datetime import datetime
 
 # Import des fonctions et constantes depuis utils.py
+# Assure-toi que utils.py est bien dans le même dossier
 import utils
 
 # --- CONFIGURATION ET STYLE ---
 st.set_page_config(page_title="Yusco - Formulaire Chantier", layout="centered", page_icon="📋")
 
-# CSS inspiré du design Yusco avec gradients et animations - Compatible Dark/Light Mode
+# CSS OPTIMISÉ - Compatible Native Streamlit Dark/Light Mode
+# La stratégie ici est d'utiliser var(--secondary-background-color) etc. 
+# pour que les couleurs changent dynamiquement avec le réglage natif.
 st.markdown("""
 <style>
-    /* Variables de couleurs Yusco */
+    /* 1. Variables de couleurs de marque (Restent fixes) */
     :root {
         --y-green: #3B746A;
         --y-orange: #EB6408;
@@ -21,48 +24,24 @@ st.markdown("""
         --y-green-dark: #2d5a52;
     }
     
-    /* Fond général - S'adapte au thème */
+    /* 2. Fond général avec un gradient subtil basé sur les couleurs du thème actuel */
     .stApp { 
-        background: var(--background-color);
+        /* Utilise les couleurs du thème actuel pour créer le gradient */
+        background-image: linear-gradient(135deg, var(--secondary-background-color) 0%, var(--background-color) 100%);
+        background-attachment: fixed;
     }
     
-    /* Variables pour Dark Mode */
-    [data-theme="dark"] {
-        --background-color: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        --card-bg: rgba(255, 255, 255, 0.05);
-        --card-bg-hover: rgba(255, 255, 255, 0.08);
-        --card-border: rgba(255, 255, 255, 0.1);
-        --text-primary: #ffffff;
-        --text-secondary: #e0e0e0;
-        --text-tertiary: #94a3b8;
-        --header-bg: linear-gradient(135deg, #1e293b 0%, #334155 100%);
-        --input-bg: rgba(255, 255, 255, 0.05);
-        --input-border: rgba(255, 255, 255, 0.1);
-    }
-    
-    /* Variables pour Light Mode */
-    [data-theme="light"] {
-        --background-color: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-        --card-bg: rgba(255, 255, 255, 0.9);
-        --card-bg-hover: rgba(255, 255, 255, 1);
-        --card-border: rgba(0, 0, 0, 0.1);
-        --text-primary: #1e293b;
-        --text-secondary: #334155;
-        --text-tertiary: #64748b;
-        --header-bg: linear-gradient(135deg, #ffffff 0%, #f1f5f9 100%);
-        --input-bg: rgba(255, 255, 255, 0.9);
-        --input-border: rgba(0, 0, 0, 0.15);
-    }
-    
-    /* En-tête principal avec gradient - S'adapte au thème */
+    /* 3. En-tête principal */
     .main-header { 
-        background: var(--header-bg);
+        background-color: var(--secondary-background-color);
         padding: 1.5rem;
         border-radius: 12px;
         margin-bottom: 1.5rem;
         text-align: center;
         border-bottom: 4px solid var(--y-orange);
-        box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+        /* Ombre douce compatible light/dark */
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        border: 1px solid rgba(128, 128, 128, 0.1);
     }
     
     .main-header h1 {
@@ -70,56 +49,41 @@ st.markdown("""
         font-weight: 900;
         letter-spacing: -0.5px;
         margin: 0;
-        color: var(--text-primary) !important;
+        color: var(--text-color) !important;
     }
     
     .main-header p {
         font-size: 0.7rem;
-        color: var(--text-tertiary);
+        color: var(--text-color);
+        opacity: 0.7;
         text-transform: uppercase;
         letter-spacing: 2px;
         font-weight: 700;
         margin-top: 0.25rem;
     }
     
-    /* Conteneur principal */
-    .block-container { 
-        max-width: 900px;
-        padding: 1rem;
-    }
-    
-    /* Cartes de phase avec effet glassmorphism - S'adapte au thème */
-    .phase-block { 
-        background: var(--card-bg);
-        backdrop-filter: blur(10px);
-        padding: 1.5rem;
-        border-radius: 16px;
-        margin-bottom: 1.5rem;
-        border: 1px solid var(--card-border);
-        box-shadow: 0 8px 32px rgba(0,0,0,0.1);
-        transition: all 0.3s ease;
-    }
-    
-    .phase-block:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-        background: var(--card-bg-hover);
-    }
-    
-    /* Cartes de questions avec animation - S'adapte au thème */
-    .question-card { 
-        background: var(--card-bg);
-        padding: 1.25rem;
+    /* 4. Cartes (Phases & Questions) */
+    .phase-block, .question-card { 
+        background-color: var(--secondary-background-color);
+        border: 1px solid rgba(128, 128, 128, 0.1); /* Bordure subtile */
         border-radius: 12px;
+        padding: 1.5rem;
         margin-bottom: 1rem;
+        box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    
+    .question-card {
+        padding: 1.25rem;
         border-left: 4px solid var(--y-green);
-        transition: all 0.25s ease;
+        /* Animation d'entrée */
         animation: slideIn 0.3s ease-out;
     }
-    
-    .question-card:hover {
-        background: var(--card-bg-hover);
-        border-left-color: var(--y-orange);
+
+    .phase-block:hover, .question-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        border-color: var(--y-orange);
     }
     
     @keyframes slideIn {
@@ -127,15 +91,11 @@ st.markdown("""
         to { opacity: 1; transform: translateY(0); }
     }
     
-    /* Typographie - S'adapte au thème */
-    h1, h2, h3 { 
-        color: var(--text-primary) !important;
-        font-weight: 900 !important;
-        letter-spacing: -0.5px;
+    /* 5. Typographie Globale */
+    h1, h2, h3, h4, h5, h6 { 
+        color: var(--text-color) !important;
+        font-weight: 800 !important;
     }
-    
-    h2 { font-size: 1.5rem !important; }
-    h3 { font-size: 1.25rem !important; }
     
     /* Descriptions */
     .description { 
@@ -150,152 +110,91 @@ st.markdown("""
         font-weight: 700;
         margin-left: 0.5rem;
     }
-    
-    /* Boîtes de messages - Mode sombre */
-    [data-theme="dark"] .success-box { 
-        background: linear-gradient(135deg, rgba(52, 211, 153, 0.15) 0%, rgba(16, 185, 129, 0.15) 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border-left: 5px solid #10b981;
-        color: #6ee7b7;
-        margin: 1rem 0;
-        backdrop-filter: blur(10px);
-    }
-    
-    [data-theme="dark"] .error-box { 
-        background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.15) 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border-left: 5px solid #ef4444;
-        color: #fca5a5;
-        margin: 1rem 0;
-        backdrop-filter: blur(10px);
-    }
-    
-    /* Boîtes de messages - Mode clair */
-    [data-theme="light"] .success-box { 
-        background: linear-gradient(135deg, rgba(52, 211, 153, 0.2) 0%, rgba(16, 185, 129, 0.2) 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border-left: 5px solid #10b981;
-        color: #047857;
-        margin: 1rem 0;
-    }
-    
-    [data-theme="light"] .error-box { 
-        background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(220, 38, 38, 0.2) 100%);
-        padding: 1rem;
-        border-radius: 12px;
-        border-left: 5px solid #ef4444;
-        color: #b91c1c;
-        margin: 1rem 0;
-    }
-    
-    /* Boutons avec gradients */
-    .stButton > button {
-        border-radius: 10px;
-        font-weight: 700;
-        padding: 0.75rem 1.5rem;
-        border: none;
-        transition: all 0.3s ease;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        font-size: 0.85rem;
-    }
-    
-    .stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 16px rgba(235, 100, 8, 0.4);
-    }
-    
-    div[data-testid="stButton"] > button {
-        width: 100%;
-        background: linear-gradient(135deg, var(--y-orange) 0%, #ff7b2e 100%);
-        color: white;
-    }
-    
-    /* Inputs et select - S'adapte au thème */
+
+    /* 6. Inputs & Selects */
+    /* On force la transparence pour laisser le thème natif gérer la lisibilité */
     .stTextInput > div > div > input,
     .stSelectbox > div > div > select,
     .stTextArea > div > div > textarea {
-        background: var(--input-bg) !important;
-        border: 1px solid var(--input-border) !important;
+        background-color: var(--background-color) !important;
+        color: var(--text-color) !important;
+        border: 1px solid rgba(128, 128, 128, 0.2) !important;
         border-radius: 8px !important;
-        color: var(--text-secondary) !important;
-        transition: all 0.3s ease;
     }
-    
+
     .stTextInput > div > div > input:focus,
     .stSelectbox > div > div > select:focus,
     .stTextArea > div > div > textarea:focus {
         border-color: var(--y-green) !important;
         box-shadow: 0 0 0 2px rgba(59, 116, 106, 0.2) !important;
     }
-    
-    /* Expander - S'adapte au thème */
-    .streamlit-expanderHeader {
-        background: var(--card-bg) !important;
-        border-radius: 10px !important;
-        border: 1px solid var(--card-border) !important;
-        font-weight: 700 !important;
-        color: var(--text-primary) !important;
+
+    /* 7. Boutons Yusco */
+    div[data-testid="stButton"] > button {
+        width: 100%;
+        background: linear-gradient(135deg, var(--y-orange) 0%, #ff7b2e 100%);
+        color: white !important;
+        border: none;
+        border-radius: 8px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        padding: 0.6rem 1rem;
+        transition: all 0.3s;
+    }
+
+    div[data-testid="stButton"] > button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(235, 100, 8, 0.4);
+        color: white !important;
     }
     
-    /* Divider - S'adapte au thème */
-    hr {
-        border-color: var(--card-border) !important;
-        margin: 1.5rem 0 !important;
+    /* Boutons de téléchargement (Vert) */
+    .stDownloadButton > button {
+        background: linear-gradient(135deg, var(--y-green) 0%, var(--y-green-light) 100%) !important;
+        color: white !important;
+        border: none !important;
+    }
+
+    /* 8. Messages (Success/Error) avec transparence pour compatibilité */
+    .success-box { 
+        background-color: rgba(16, 185, 129, 0.1); 
+        border-left: 5px solid #10b981;
+        color: #10b981; 
+        padding: 1rem; 
+        border-radius: 8px;
+        margin: 1rem 0;
     }
     
-    /* Info, warning, success boxes natives de Streamlit - S'adapte au thème */
-    .stAlert {
-        background: var(--card-bg);
-        backdrop-filter: blur(10px);
-        border-radius: 10px;
-        border: 1px solid var(--card-border);
+    .error-box { 
+        background-color: rgba(239, 68, 68, 0.1); 
+        border-left: 5px solid #ef4444;
+        color: #ef4444; 
+        padding: 1rem; 
+        border-radius: 8px;
+        margin: 1rem 0;
     }
-    
-    /* Spinner */
-    .stSpinner > div {
-        border-color: var(--y-orange) transparent transparent transparent !important;
-    }
-    
-    /* Badge en ligne - Mode sombre */
-    [data-theme="dark"] .status-badge {
+
+    /* 9. Badges */
+    .status-badge {
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        background: rgba(16, 185, 129, 0.15);
+        background-color: var(--secondary-background-color);
         padding: 0.5rem 1rem;
         border-radius: 20px;
-        border: 1px solid rgba(16, 185, 129, 0.3);
+        border: 1px solid var(--y-green);
         font-size: 0.7rem;
         font-weight: 900;
         text-transform: uppercase;
         letter-spacing: 2px;
-        color: #6ee7b7;
-    }
-    
-    /* Badge en ligne - Mode clair */
-    [data-theme="light"] .status-badge {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        background: rgba(16, 185, 129, 0.2);
-        padding: 0.5rem 1rem;
-        border-radius: 20px;
-        border: 1px solid rgba(16, 185, 129, 0.4);
-        font-size: 0.7rem;
-        font-weight: 900;
-        text-transform: uppercase;
-        letter-spacing: 2px;
-        color: #047857;
+        color: var(--y-green);
     }
     
     .pulse-dot {
         width: 8px;
         height: 8px;
-        background: #10b981;
+        background: var(--y-green);
         border-radius: 50%;
         animation: pulse 2s infinite;
     }
@@ -305,47 +204,17 @@ st.markdown("""
         50% { opacity: 0.5; }
     }
     
-    /* Download buttons */
-    .stDownloadButton > button {
-        background: linear-gradient(135deg, var(--y-green) 0%, var(--y-green-light) 100%) !important;
-        color: white !important;
+    /* 10. Nettoyage divers */
+    hr {
+        border-color: rgba(128, 128, 128, 0.2) !important;
     }
     
-    /* Conteneur avec bordure - S'adapte au thème */
-    [data-testid="stVerticalBlock"] > [style*="border"] {
-        border-color: var(--card-border) !important;
-        border-radius: 10px !important;
-        background: var(--card-bg) !important;
+    .streamlit-expanderHeader {
+        background-color: var(--secondary-background-color) !important;
+        color: var(--text-color) !important;
+        font-weight: 600 !important;
     }
-    
-    /* Script JS pour détecter et appliquer le thème Streamlit */
 </style>
-
-<script>
-    // Détection automatique du thème Streamlit
-    function updateTheme() {
-        const streamlitDoc = window.parent.document;
-        const isDark = streamlitDoc.querySelector('[data-testid="stAppViewContainer"]')
-            ?.getAttribute('data-theme') === 'dark' 
-            || streamlitDoc.documentElement.classList.contains('dark')
-            || window.matchMedia('(prefers-color-scheme: dark)').matches;
-        
-        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-    }
-    
-    // Mise à jour initiale
-    updateTheme();
-    
-    // Observer les changements de thème
-    const observer = new MutationObserver(updateTheme);
-    observer.observe(window.parent.document.documentElement, {
-        attributes: true,
-        attributeFilter: ['class', 'data-theme']
-    });
-    
-    // Écouter les changements système
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
-</script>
 """, unsafe_allow_html=True)
 
 # --- GESTION DE L'ÉTAT ---
@@ -398,8 +267,15 @@ st.markdown('''
 if st.session_state['step'] == 'PROJECT_LOAD':
     st.info("🔄 Tentative de chargement de la structure des formulaires...")
     with st.spinner("Chargement en cours..."):
+        # Assurez-vous que ces fonctions existent dans utils.py
+        # Si vous n'utilisez pas de cache Streamlit, retirez les .clear()
+        try:
+            utils.load_form_structure_from_firestore.clear() 
+            utils.load_site_data_from_firestore.clear() 
+        except:
+            pass # Si la fonction n'est pas décorée avec @st.cache_data
+            
         df_struct = utils.load_form_structure_from_firestore()
-        utils.load_site_data_from_firestore.clear() 
         df_site = utils.load_site_data_from_firestore()
         
         if df_struct is not None and df_site is not None:
@@ -410,8 +286,6 @@ if st.session_state['step'] == 'PROJECT_LOAD':
         else:
             st.error("❌ Impossible de charger les données. Vérifiez votre connexion et les secrets Firebase.")
             if st.button("🔄 Réessayer le chargement"):
-                utils.load_form_structure_from_firestore.clear() 
-                utils.load_site_data_from_firestore.clear() 
                 st.session_state['step'] = 'PROJECT_LOAD'
                 st.rerun()
 
