@@ -5,71 +5,125 @@ import urllib.parse
 from datetime import datetime
 
 # Import des fonctions et constantes depuis utils.py
-# (Assurez-vous que utils.py est dans le même répertoire)
 import utils
 
 # --- CONFIGURATION ET STYLE ---
 st.set_page_config(page_title="Formulaire Dynamique - Firestore", layout="centered")
 
-# CSS ADAPTÉ POUR LE DARKMODE ET LIGHTMODE (Utilisation des variables CSS Streamlit)
+# CSS MODERNISÉ (Glassmorphism, Cards, Hover effects)
 st.markdown("""
 <style>
-    /* Utilisation de var(--secondary-background-color) et var(--text-color) pour s'adapter au thème choisi par l'utilisateur */
-    
-    .main-header { 
-        background-color: var(--secondary-background-color); 
-        padding: 20px; 
-        border-radius: 10px; 
-        margin-bottom: 20px; 
-        text-align: center; 
-        border-bottom: 3px solid #E9630C; 
-        color: var(--text-color);
+    /* --- VARIABLES GLOBALES --- */
+    :root {
+        --primary-color: #E9630C;
+        --primary-hover: #ff8c42;
+        --card-bg: var(--secondary-background-color);
+        --shadow-light: 0 4px 6px rgba(0,0,0,0.05);
+        --shadow-hover: 0 10px 15px rgba(0,0,0,0.1);
+    }
+
+    /* --- HEADER AVEC DÉGRADÉ --- */
+    .main-header {
+        background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-hover) 100%);
+        padding: 2.5rem;
+        border-radius: 15px;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 20px rgba(233, 99, 12, 0.3);
+        text-align: center;
+        color: white !important;
+    }
+    .main-header h1 {
+        color: white !important;
+        margin: 0;
+        font-weight: 700;
+        font-size: 2.2rem;
+        text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+
+    /* --- CARTES ET TUILES (Point 1 & 5) --- */
+    /* Style pour les blocs d'information (remplace st.container border=True par un style custom) */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 12px;
+        border: 1px solid rgba(128, 128, 128, 0.15);
+        background-color: var(--card-bg);
+        box-shadow: var(--shadow-light);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        margin-bottom: 1rem;
     }
     
-    .block-container { max-width: 800px; }
-    
-    .phase-block { 
-        background-color: var(--secondary-background-color); 
-        padding: 25px; 
-        border-radius: 12px; 
-        margin-bottom: 20px; 
-        border: 1px solid rgba(128, 128, 128, 0.2); 
+    /* Effet de survol sur les conteneurs (Point 1) */
+    div[data-testid="stVerticalBlockBorderWrapper"]:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-hover);
+        border-color: var(--primary-color);
+    }
+
+    /* --- QUESTIONS (Point 4) --- */
+    .question-card {
+        background-color: var(--card-bg);
+        padding: 20px;
+        border-radius: 0 12px 12px 0;
+        margin-bottom: 20px;
+        border-left: 4px solid var(--primary-color);
+        box-shadow: var(--shadow-light);
+    }
+
+    /* --- BOUTONS STYLISÉS (Point 4) --- */
+    div[data-testid="stButton"] > button {
+        border: none;
+        background-color: var(--primary-color);
+        color: white;
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.6rem 1.5rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 6px rgba(233, 99, 12, 0.2);
+        width: 100%;
     }
     
-    .question-card { 
-        background-color: transparent; 
-        padding: 15px; 
-        border-radius: 8px; 
-        margin-bottom: 15px; 
-        border-left: 3px solid #E9630C; 
+    div[data-testid="stButton"] > button:hover {
+        background-color: var(--primary-hover);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(233, 99, 12, 0.4);
+        color: white;
     }
+
+    /* --- ALERTES & TEXTES --- */
+    .description { font-size: 0.9em; color: var(--primary-color); margin-bottom: 10px; font-style: italic; }
     
-    h1, h2, h3 { color: var(--text-color) !important; }
-    
-    .description { font-size: 0.9em; color: #EB6408; margin-bottom: 10px; }
-    .mandatory { color: #F4B400; font-weight: bold; margin-left: 5px; }
-    
-    /* Utilisation de rgba pour que le fond soit coloré mais transparent (compatible Light/Dark) */
     .success-box { 
         background-color: rgba(76, 175, 80, 0.1); 
         padding: 15px; 
-        border-radius: 8px; 
+        border-radius: 10px; 
         border-left: 5px solid #4caf50; 
         color: var(--text-color); 
-        margin: 10px 0; 
+        margin: 15px 0; 
     }
     
     .error-box { 
         background-color: rgba(255, 107, 107, 0.1); 
         padding: 15px; 
-        border-radius: 8px; 
+        border-radius: 10px; 
         border-left: 5px solid #ff6b6b; 
         color: var(--text-color); 
-        margin: 10px 0; 
+        margin: 15px 0; 
     }
     
-    .stButton > button { border-radius: 8px; font-weight: bold; padding: 0.5rem 1rem; }
-    div[data-testid="stButton"] > button { width: 100%; }
+    /* Styles pour les "Tuiles" de données */
+    .data-label {
+        font-size: 0.8em;
+        text-transform: uppercase;
+        color: gray;
+        margin-bottom: 2px;
+    }
+    .data-value {
+        font-size: 1.1em;
+        font-weight: bold;
+        color: var(--text-color);
+    }
+    h1, h2, h3 { color: var(--text-color) !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -101,7 +155,7 @@ init_session_state()
 
 # --- FLUX PRINCIPAL ---
 
-st.markdown('<div class="main-header"><h1>📝Formulaire Chantier </h1></div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header"><h1>📝 Formulaire Chantier</h1></div>', unsafe_allow_html=True)
 
 # 1. CHARGEMENT
 if st.session_state['step'] == 'PROJECT_LOAD':
@@ -199,7 +253,7 @@ elif st.session_state['step'] == 'IDENTIFICATION':
         df_struct = st.session_state.get('df_struct')
         if df_struct is None:
             st.error("Structure du formulaire manquante. Veuillez recharger le projet.")
-            st.rerun() # <--- CORRECTION ICI
+            st.rerun() 
         # --------------------------------------------------------------------
         
         # NOTE: On n'utilise pas le try/except ici pour ne pas masquer d'erreur dans l'étape initiale
@@ -221,7 +275,7 @@ elif st.session_state['step'] == 'IDENTIFICATION':
 
             html_errors = '<br>'.join([f"- {e}" for e in cleaned_errors])
             st.session_state['last_validation_errors'] = html_errors
-            st.rerun() # <--- CORRECTION ICI
+            st.rerun() 
             # -----------------------------------------
 
 # 4. BOUCLE PHASES
@@ -229,35 +283,57 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
     project_intitule = st.session_state['project_data'].get('Intitulé', 'Projet Inconnu')
     with st.expander(f"📍 Projet : {project_intitule}", expanded=False):
         project_details = st.session_state['project_data']
-        st.markdown(":orange-badge[**Détails du Projet sélectionné :**]")
         
-        # Affichage des détails du projet (récupéré des données 'Sites')
+        # --- MODIFICATION DESIGN: TUILES AVEC ICONES (Point 2 & 5) ---
+        # Au lieu de simples listes, on utilise des colonnes et du HTML stylisé
+        
+        # Groupe 1 : Infos Générales
         with st.container(border=True):
-            st.markdown("**Informations générales**")
+            st.markdown("#### 🏢 Informations générales")
             cols1 = st.columns([1, 1, 1]) 
             fields_l1 = utils.DISPLAY_GROUPS[0]
             for i, field_key in enumerate(fields_l1):
                 renamed_key = utils.PROJECT_RENAME_MAP.get(field_key, field_key)
                 value = project_details.get(field_key, 'N/A')
-                with cols1[i]: st.markdown(f"**{renamed_key}** : {value}")
+                with cols1[i]: 
+                    st.markdown(f"""
+                    <div style="margin-bottom:10px;">
+                        <div class="data-label">{renamed_key}</div>
+                        <div class="data-value">{value}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
+        # Groupe 2 : Charge Standard
         with st.container(border=True):
-            st.markdown("**Points de charge Standard**")
+            st.markdown("#### ⚡ Points de charge Standard")
             cols2 = st.columns([1, 1, 1])
             fields_l2 = utils.DISPLAY_GROUPS[1]
             for i, field_key in enumerate(fields_l2):
                 renamed_key = utils.PROJECT_RENAME_MAP.get(field_key, field_key)
                 value = project_details.get(field_key, 'N/A')
-                with cols2[i]: st.markdown(f"**{renamed_key}** : {value}")
+                with cols2[i]: 
+                    st.markdown(f"""
+                    <div style="margin-bottom:10px;">
+                        <div class="data-label">{renamed_key}</div>
+                        <div class="data-value">{value}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
 
+        # Groupe 3 : Pré-équipés
         with st.container(border=True):
-            st.markdown("**Points de charge Pré-équipés**")
+            st.markdown("#### 🔌 Points de charge Pré-équipés")
             cols3 = st.columns([1, 1, 1])
             fields_l3 = utils.DISPLAY_GROUPS[2]
             for i, field_key in enumerate(fields_l3):
                 renamed_key = utils.PROJECT_RENAME_MAP.get(field_key, field_key)
                 value = project_details.get(field_key, 'N/A')
-                with cols3[i]: st.markdown(f"**{renamed_key}** : {value}")
+                with cols3[i]: 
+                    st.markdown(f"""
+                    <div style="margin-bottom:10px;">
+                        <div class="data-label">{renamed_key}</div>
+                        <div class="data-value">{value}</div>
+                    </div>
+                    """, unsafe_allow_html=True)
         
         st.write(":orange-badge[**Phases et Identification déjà complétées :**]")
         for idx, item in enumerate(st.session_state['collected_data']):
@@ -366,7 +442,7 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                     df_struct = st.session_state.get('df_struct')
                     if df_struct is None:
                         st.error("Structure du formulaire manquante. Veuillez recharger le projet.")
-                        st.rerun() # <--- CORRECTION ICI
+                        st.rerun() 
                         st.stop()
                     # -------------------------------------------------------------
                     
@@ -384,7 +460,7 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                         st.session_state['last_validation_errors'] = f"Erreur critique dans la validation (AttributeError) : {e}"
                         st.error(f"Erreur interne : {e}. Veuillez contacter le support. (Code: ATTRIB-VALID)")
                         st.session_state['show_comment_on_error'] = True 
-                        st.rerun() # <--- CORRECTION IMPORTANTE ICI (Ligne qui plantait)
+                        st.rerun() 
                         st.stop()
 
                     if is_valid:
@@ -404,7 +480,7 @@ elif st.session_state['step'] in ['LOOP_DECISION', 'FILL_PHASE']:
                         
                         html_errors = '<br>'.join([f"- {e}" for e in cleaned_errors])
                         st.session_state['last_validation_errors'] = html_errors
-                        st.rerun() # <--- CORRECTION ICI
+                        st.rerun() 
                         # -----------------------------------------
             st.markdown('</div>', unsafe_allow_html=True)
 
